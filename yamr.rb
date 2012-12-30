@@ -247,7 +247,7 @@ window.signal_connect('key-press-event') do |widget, event|
   end
 
   single = count || 1
-  double = count || document.splits
+  double = single * document.splits
 
   case c
     when 'j'
@@ -269,7 +269,7 @@ window.signal_connect('key-press-event') do |widget, event|
     when 'L'
       document.insert_blank_page_to_right
     when 'g'
-      document.go_page(single)
+      document.go_page(count ? (count - 1) / document.splits * document.splits + 1 : 1)
     when 'G'
       document.go_page(count ? document.splits * (count - 1) + 1 : -document.splits)
     when 'v'

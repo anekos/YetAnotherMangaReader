@@ -83,7 +83,7 @@ class PDFDocument
 
       splits.times do
         |index|
-        render_page(context, @virtual_page + index)
+        render_page(context, @virtual_page + (@invert ? index : splits - index - 1))
         context.translate(page_width, 0)
       end
     end

@@ -100,7 +100,7 @@ class PDFDocument
   end
 
   def forward_pages(n = 2)
-    if @virtual_page < (@page_map.size - n)
+    if current_page_number < (@total_page - n)
       @virtual_page += n
       true
     else
@@ -109,7 +109,7 @@ class PDFDocument
   end
 
   def back_pages(n = 2)
-    if @virtual_page > 0
+    if current_page_number > n
       @virtual_page -= n
       true
     else
@@ -118,11 +118,14 @@ class PDFDocument
   end
 
   def go_page(n)
+    n = @total_page + n + 1 if n < 0
+    n -= 2
     @virtual_page = n if -1 <= n and n < @page_map.size
   end
 
   def insert_blank_page_to_left
     begin
+      @total_page += 1
       @page_map.insert(@virtual_page + 1 , nil)
     rescue
     end
@@ -130,6 +133,7 @@ class PDFDocument
 
   def insert_blank_page_to_right
     begin
+      @total_page += 1
       @page_map.insert(@virtual_page, nil)
     rescue
     end
@@ -255,6 +259,7 @@ window.signal_connect('key-press-event') do |widget, event|
       unless document.back_pages(double)
         previous_file = YAMR.previous_file(document.pdf_filepath)
         document = PDFDocument.new(previous_file) if previous_file
+        document.go_page(-document.splits)
       end
     when 'b'
       document.insert_blank_page_to_right
@@ -264,9 +269,9 @@ window.signal_connect('key-press-event') do |widget, event|
     when 'L'
       document.insert_blank_page_to_right
     when 'g'
-      document.go_page(count || -1)
+      document.go_page(single)
     when 'G'
-      document.go_page(double)
+      document.go_page(count ? document.splits * (count - 1) + 1 : -document.splits)
     when 'v'
       document.invert()
     when 'r'

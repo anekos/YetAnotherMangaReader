@@ -154,6 +154,7 @@ if ARGV.size < 1
 end
 
 count = nil
+save_counter = 0
 
 filepath = Pathname.new(ARGV[0])
 document = PDFDocument.new(filepath)
@@ -219,6 +220,13 @@ window.signal_connect('key-press-event') do |widget, event|
     when 'q'
       document.save()
       Gtk.main_quit
+  end
+
+  if save_counter > 10
+    save_counter = 0
+    document.save()
+  else
+    save_counter += 1
   end
 
   count = nil

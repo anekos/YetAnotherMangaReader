@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# vim: set fileencoding=utf-8 :
 
 require 'gtk2'
 require 'poppler'
@@ -7,13 +8,14 @@ require 'yaml'
 
 class PDFDocument
   attr_accessor :splits
+  attr_reader :pdf_filepath
 
-  def initialize(pdf_filename, blank_page_filename=nil)
+  def initialize(pdf_filepath, blank_page_filename=nil)
     if blank_page_filename
     end
 
-    @pdf_filename = pdf_filename
-    @document = Poppler::Document.new(pdf_filename.to_s)
+    @pdf_filepath = pdf_filepath.cleanpath.expand_path
+    @document = Poppler::Document.new(pdf_filepath.to_s)
 
     total_page = @document.size
 
@@ -95,12 +97,18 @@ class PDFDocument
   def forward_pages(n = 2)
     if @virtual_page < (@page_map.size - n)
       @virtual_page += n
+      true
+    else
+      false
     end
   end
 
   def back_pages(n = 2)
     if @virtual_page > 0
       @virtual_page -= n
+      true
+    else
+      false
     end
   end
 
@@ -127,7 +135,7 @@ class PDFDocument
   end
 
   def load(save_filepath = default_save_filepath)
-    data = (YAML.load_file(save_filepath) rescue {})[@pdf_filename.cleanpath.expand_path.to_s]
+    data = (YAML.load_file(save_filepath) rescue {})[@pdf_filepath.cleanpath.expand_path.to_s]
     return false unless data
     %W[invert splits virtual_page].each do
       |name|
@@ -138,7 +146,7 @@ class PDFDocument
 
   def save(save_filepath = default_save_filepath)
     data = (YAML.load_file(save_filepath) rescue {})
-    key = @pdf_filename.cleanpath.expand_path.to_s
+    key = @pdf_filepath.cleanpath.expand_path.to_s
     data[key] = {
       :invert => @invert,
       :splits => splits,
@@ -147,6 +155,30 @@ class PDFDocument
     File.open(save_filepath, 'w') {|file| file.write(YAML.dump(data)) }
   end
 end
+
+class YAMR
+  def self.next_file(filepath)
+    es, i = self.get_dir_info(filepath)
+    return nil unless i
+    i += 1
+    i < es.size ? es[i] : es.first
+  end
+
+  def self.previous_file(filepath)
+    es, i = self.get_dir_info(filepath)
+    return nil unless i
+    i -= 1
+    i >= 0 ? es[i] : es.last
+  end
+
+  def self.get_dir_info(filepath)
+    dir = filepath.dirname
+    es = dir.entries.sort.map {|it| (dir + it).cleanpath.expand_path }
+    i = es.index(filepath)
+    return es, i
+  end
+end
+
 
 if ARGV.size < 1
   puts "Usage: #{$0} file"
@@ -191,9 +223,15 @@ window.signal_connect('key-press-event') do |widget, event|
 
   case c
     when 'j'
-      document.forward_pages(double)
+      unless document.forward_pages(double)
+        next_file = YAMR.next_file(document.pdf_filepath)
+        document = PDFDocument.new(next_file) if next_file
+      end
     when 'k'
-      document.back_pages(double)
+      unless document.back_pages(double)
+        previous_file = YAMR.previous_file(document.pdf_filepath)
+        document = PDFDocument.new(previous_file) if previous_file
+      end
     when 'b'
       document.insert_blank_page_to_right
       document.forward_pages(double)

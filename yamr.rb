@@ -4,6 +4,8 @@ require 'gtk2'
 require 'poppler'
 
 class PDFDocument
+  attr_accessor :splits
+
   def initialize(pdf_filename, blank_page_filename=nil)
     if blank_page_filename
     end
@@ -21,6 +23,7 @@ class PDFDocument
 
     @count = 1
     @invert = false
+    @splits = 2
 
   end
 
@@ -55,31 +58,34 @@ class PDFDocument
 
   def draw(context, context_width, context_height)
     context.save do
-      page_size = self.page_size(@virtual_page + 1)
-      if !page_size
-        page_size = self.page_size(@virtual_page)
+
+      page_size = nil
+      (splits.downto 0).any? do
+        |index|
+        page_size = self.page_size(@virtual_page + index)
       end
-      if !page_size
-        return
-      end
+      return unless page_size
+
       page_width, page_height = page_size.map { |e| e.to_f}
 
       context_width = context_width.to_f
       context_height = context_height.to_f
 
-      if (context_width / context_height) >= (page_width * 2 / page_height)
+      if (context_width / context_height) >= (page_width * splits / page_height)
         scale_rate = context_height / page_height
         context.scale(scale_rate, scale_rate)
-        context.translate((context_width - scale_rate* 2 * page_width) / scale_rate / 2, 0)
+        context.translate((context_width - scale_rate* splits * page_width) / scale_rate / splits, 0)
       else
-        scale_rate = context_width / page_width / 2
+        scale_rate = context_width / page_width / splits
         context.scale(scale_rate, scale_rate)
-        context.translate(0, (context_height- scale_rate* page_height) / scale_rate / 2)
+        context.translate(0, (context_height- scale_rate* page_height) / scale_rate / splits)
       end
 
-      render_page(context, @virtual_page + (@invert ? 1 : 0))
-      context.translate(page_width, 0)
-      render_page(context, @virtual_page + (@invert ? 0 : 1))
+      splits.times do
+        |index|
+        render_page(context, @virtual_page + index)
+        context.translate(page_width, 0)
+      end
     end
   end
 
@@ -170,6 +176,12 @@ window.signal_connect('key-press-event') do |widget, event|
       document.go_page(double)
     when 'v'
       document.invert
+    when 's'
+      if count
+        document.splits = count if (1 .. 10) === count
+      else
+        document.splits = document.splits > 1 ? 1 : 2
+      end
     when 'q'
       Gtk.main_quit
   end

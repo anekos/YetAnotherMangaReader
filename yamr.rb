@@ -7,6 +7,14 @@ require 'pathname'
 require 'yaml'
 
 class PDFDocument
+  Size = Struct.new(:width, :height)
+
+  class Size
+    def to_f
+      Size.new(*self.to_a.map(&:to_f))
+    end
+  end
+
   SAVE_NAMES = %W[invert splits virutal_page_number].map(&:intern)
 
   attr_accessor :splits
@@ -27,7 +35,23 @@ class PDFDocument
     @count = 1
     @invert = false
     @splits = 2
+  end
 
+  def caption
+    cpn = current_page_number
+
+    current_page =
+      if splits > 1
+        if @invert
+          "#{cpn}-#{cpn + splits - 1}"
+        else
+          "#{cpn + splits - 1}-#{cpn}"
+        end
+      else
+        "#{cpn}"
+      end
+
+    "#{filepath.basename.sub_ext('')} [#{current_page}/#{@total_pages}]"
   end
 
   def invert
@@ -38,29 +62,10 @@ class PDFDocument
     @virutal_page_number + 2
   end
 
-  def actual_page (virutal_page_number)
-    if virutal_page_number > -1 and virutal_page_number < @page_map.size and @page_map[virutal_page_number]
-      @page_map[virutal_page_number]
-    else
-      nil
-    end
-  end
-
-  def page_size (virutal_page_number = 0)
-    if ap = actual_page(virutal_page_number)
-      @document[ap].size
-    else
-      nil
-    end
-  end
-
-  def render_page(context, virutal_page_number)
-    begin
-      if ap = actual_page(virutal_page_number)
-        context.render_poppler_page(@document[ap])
-      end
-    rescue
-    end
+  def current_page_number=(n)
+    n = @total_pages + n + 1 if n < 0
+    n -= 2
+    @virutal_page_number = n if -1 <= n and n < @page_map.size
   end
 
   def draw(context, context_width, context_height)
@@ -69,35 +74,35 @@ class PDFDocument
       page_size = nil
       (splits.downto 0).any? do
         |index|
-        page_size = self.page_size(@virutal_page_number + index)
+        page_size = self.get_page_size(@virutal_page_number + index)
       end
       return unless page_size
 
-      page_width, page_height = page_size.map { |e| e.to_f}
+      page_size = page_size.to_f
 
       context_width = context_width.to_f
       context_height = context_height.to_f
 
-      if (context_width / context_height) >= (page_width * splits / page_height)
-        scale_rate = context_height / page_height
+      if (context_width / context_height) >= (page_size.width * splits / page_size.height)
+        scale_rate = context_height / page_size.height
         context.scale(scale_rate, scale_rate)
-        context.translate((context_width - scale_rate* splits * page_width) / scale_rate / splits, 0)
+        context.translate((context_width - scale_rate* splits * page_size.width) / scale_rate / splits, 0)
       else
-        scale_rate = context_width / page_width / splits
+        scale_rate = context_width / page_size.width / splits
         context.scale(scale_rate, scale_rate)
-        context.translate(0, (context_height- scale_rate* page_height) / scale_rate / splits)
+        context.translate(0, (context_height- scale_rate* page_size.height) / scale_rate / splits)
       end
 
       splits.times do
         |index|
         page = @virutal_page_number + (@invert ? index : splits - index)
         render_page(context, page)
-        context.translate(page_width, 0)
+        context.translate(page_size.width, 0)
       end
     end
   end
 
-  def forward_pages(n = 2)
+  def forward_pages(n = splits)
     if current_page_number < (@total_pages - n)
       @virutal_page_number += n
       true
@@ -106,19 +111,13 @@ class PDFDocument
     end
   end
 
-  def back_pages(n = 2)
+  def back_pages(n = splits)
     if current_page_number > n
       @virutal_page_number -= n
       true
     else
       false
     end
-  end
-
-  def go_page(n)
-    n = @total_pages + n + 1 if n < 0
-    n -= 2
-    @virutal_page_number = n if -1 <= n and n < @page_map.size
   end
 
   def insert_blank_page_to_left
@@ -137,13 +136,8 @@ class PDFDocument
     end
   end
 
-  def default_save_filepath
-    Pathname.new(ENV['HOME']) + '.yamr.saves'
-  end
-
   def load(save_filepath = default_save_filepath)
-    data = (YAML.load_file(save_filepath) rescue {})[@filepath.cleanpath.expand_path.to_s]
-    return false unless data
+    return unless data = (YAML.load_file(save_filepath) rescue {})[@filepath.cleanpath.expand_path.to_s]
 
     SAVE_NAMES.each do
       |name|
@@ -165,21 +159,35 @@ class PDFDocument
     File.open(save_filepath, 'w') {|file| file.write(YAML.dump(data)) }
   end
 
-  def caption
-    cpn = current_page_number
+  def get_page_size (virutal_page_number = 0)
+    if ap = actual_page(virutal_page_number)
+      Size.new(*@document[ap].size)
+    else
+      nil
+    end
+  end
 
-    current_page =
-      if splits > 1
-        if @invert
-          "#{cpn}-#{cpn + splits - 1}"
-        else
-          "#{cpn + splits - 1}-#{cpn}"
-        end
-      else
-        "#{cpn}"
+  private
+
+  def actual_page (virutal_page_number)
+    if virutal_page_number > -1 and virutal_page_number < @page_map.size and @page_map[virutal_page_number]
+      @page_map[virutal_page_number]
+    else
+      nil
+    end
+  end
+
+  def render_page(context, virutal_page_number)
+    begin
+      if ap = actual_page(virutal_page_number)
+        context.render_poppler_page(@document[ap])
       end
+    rescue
+    end
+  end
 
-    "#{filepath.basename.sub_ext('')} [#{current_page}/#{@total_pages}]"
+  def default_save_filepath
+    Pathname.new(ENV['HOME']) + '.yamr.saves'
   end
 end
 
@@ -204,6 +212,139 @@ class YAMR
     i = es.index(filepath)
     return es, i
   end
+
+  def initialize
+    @count = nil
+    @save_counter = 0
+    @filepath = nil
+    @document = nil
+  end
+
+  def open (filepath)
+    @document = PDFDocument.new(filepath)
+    @document.load
+  end
+
+  def start
+    initialize_window
+    @window.show_all
+    Gtk.main
+  end
+
+  private
+
+  def initialize_window
+    @window = Gtk::Window.new
+
+    @window.signal_connect('key-press-event', &self.method(:on_key_press_event))
+
+    @drawing_area = Gtk::DrawingArea.new
+    @window.add(@drawing_area)
+    @drawing_area.signal_connect('expose-event', &self.method(:on_expose_event))
+
+    page_size = @document.get_page_size
+    @window.set_default_size(page_size.width * @document.splits, page_size.height)
+    @window.signal_connect("destroy") do
+      document.save
+      Gtk.main_quit
+      false
+    end
+
+    update_title
+  end
+
+  def on_expose_event (widget, event)
+    context = widget.window.create_cairo_context
+    x, y, w, h = widget.allocation.to_a
+
+    #背景の塗り潰し
+    context.set_source_rgb(1, 1, 1)
+    context.rectangle(0, 0, w, h)
+    context.fill
+
+    @document.draw(context, w, h)
+    true
+  end
+
+  def on_key_press_event (widget, event)
+    c = event.keyval.chr rescue nil
+
+    if '0123456789'.scan(/\d/).include?(c)
+      @count = 0 unless @count
+      @count *= 10
+      @count += c.to_i
+      return true
+    end
+
+    single = @count || 1
+    double = single * @document.splits
+
+    case c
+    when 'j'
+      unless @document.forward_pages(double)
+        next_file = YAMR.next_file(@document.filepath)
+        @document = PDFDocument.new(next_file) if next_file
+      end
+    when 'k'
+      unless @document.back_pages(double)
+        previous_file = YAMR.previous_file(@document.filepath)
+        @document = PDFDocument.new(previous_file) if previous_file
+        @document.current_page_number = -@document.splits
+      end
+    when 'J'
+      @document.forward_pages(single)
+    when 'K'
+      @document.back_pages(single)
+    when 'b'
+      @document.insert_blank_page_to_right
+      @document.forward_pages(double)
+    when 'H'
+      @document.insert_blank_page_to_left
+    when 'L'
+      @document.insert_blank_page_to_right
+    when 'g'
+      @document.current_page_number = @count ? (@count - 1) / @document.splits * @document.splits + 1 : 1
+    when 'G'
+      @document.current_page_number = @count || -@document.splits
+    when 'v'
+      @document.invert()
+    when 'r'
+      @document.load()
+    when 'w'
+      @document.save()
+    when 's'
+      if @count
+        @document.splits = @count if (1 .. 10) === @count
+      else
+        @document.splits = @document.splits > 1 ? 1 : 2
+      end
+    when 'q'
+      @document.save()
+      Gtk.main_quit
+    else
+      return
+    end
+
+    if @save_counter > 10
+      @save_counter = 0
+      @document.save()
+    else
+      @save_counter += 1
+    end
+
+    @count = nil
+    @window.title = @document.caption
+
+    @drawing_area.signal_emit('expose-event', event)
+
+    update_title
+
+    true
+  end
+
+  def update_title
+    @window.title = @document.caption
+  end
 end
 
 
@@ -212,113 +353,8 @@ if ARGV.size < 1
   exit 1
 end
 
-count = nil
-save_counter = 0
 
 filepath = Pathname.new(ARGV[0])
-document = PDFDocument.new(filepath)
-document.load
-
-window = Gtk::Window.new
-
-window.title = document.caption
-
-drawing_area = Gtk::DrawingArea.new
-drawing_area.signal_connect('expose-event') do |widget, event|
-  context = widget.window.create_cairo_context
-  x, y, w, h = widget.allocation.to_a
-
-  #背景の塗り潰し
-  context.set_source_rgb(1, 1, 1)
-  context.rectangle(0, 0, w, h)
-  context.fill
-
-  document.draw(context, w, h)
-  true
-end
-
-window.signal_connect('key-press-event') do |widget, event|
-  c = event.keyval.chr rescue nil
-
-  if '0123456789'.scan(/\d/).include?(c)
-    count = 0 unless count
-    count *= 10
-    count += c.to_i
-    next true
-  end
-
-  single = count || 1
-  double = single * document.splits
-
-  case c
-  when 'j'
-    unless document.forward_pages(double)
-      next_file = YAMR.next_file(document.filepath)
-      document = PDFDocument.new(next_file) if next_file
-    end
-  when 'k'
-    unless document.back_pages(double)
-      previous_file = YAMR.previous_file(document.filepath)
-      document = PDFDocument.new(previous_file) if previous_file
-      document.go_page(-document.splits)
-    end
-  when 'J'
-    document.forward_pages(single)
-  when 'K'
-    document.back_pages(single)
-  when 'b'
-    document.insert_blank_page_to_right
-    document.forward_pages(double)
-  when 'H'
-    document.insert_blank_page_to_left
-  when 'L'
-    document.insert_blank_page_to_right
-  when 'g'
-    document.go_page(count ? (count - 1) / document.splits * document.splits + 1 : 1)
-  when 'G'
-    document.go_page(count || -document.splits)
-  when 'v'
-    document.invert()
-  when 'r'
-    document.load()
-  when 'w'
-    document.save()
-  when 's'
-    if count
-      document.splits = count if (1 .. 10) === count
-    else
-      document.splits = document.splits > 1 ? 1 : 2
-    end
-  when 'q'
-    document.save()
-    Gtk.main_quit
-  else
-    next
-  end
-
-  if save_counter > 10
-    save_counter = 0
-    document.save()
-  else
-    save_counter += 1
-  end
-
-  count = nil
-  window.title = document.caption
-
-  drawing_area.signal_emit('expose-event', event)
-  true
-end
-
-window.add(drawing_area)
-
-page_width, page_height = document.page_size
-window.set_default_size(page_width*2, page_height)
-window.signal_connect("destroy") do
-  document.save
-  Gtk.main_quit
-  false
-end
-
-window.show_all
-Gtk.main
+app = YAMR.new
+app.open(filepath)
+app.start

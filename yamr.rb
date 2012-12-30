@@ -2,6 +2,8 @@
 
 require 'gtk2'
 require 'poppler'
+require 'pathname'
+require 'yaml'
 
 class PDFDocument
   attr_accessor :splits
@@ -10,7 +12,8 @@ class PDFDocument
     if blank_page_filename
     end
 
-    @document = Poppler::Document.new(pdf_filename)
+    @pdf_filename = pdf_filename
+    @document = Poppler::Document.new(pdf_filename.to_s)
 
     total_page = @document.size
 
@@ -118,6 +121,31 @@ class PDFDocument
     rescue
     end
   end
+
+  def default_save_filepath
+    Pathname.new(ENV['HOME']) + '.yamr.saves'
+  end
+
+  def load(save_filepath = default_save_filepath)
+    data = (YAML.load_file(save_filepath) rescue {})[@pdf_filename.cleanpath.expand_path.to_s]
+    return false unless data
+    %W[invert splits virtual_page].each do
+      |name|
+      current = self.instance_variable_get("@#{name}")
+      self.instance_variable_set("@#{name}", data[name.intern] || current)
+    end
+  end
+
+  def save(save_filepath = default_save_filepath)
+    data = (YAML.load_file(save_filepath) rescue {})
+    key = @pdf_filename.cleanpath.expand_path.to_s
+    data[key] = {
+      :invert => @invert,
+      :splits => splits,
+      :virtual_page => @virtual_page
+    }
+    File.open(save_filepath, 'w') {|file| file.write(YAML.dump(data)) }
+  end
 end
 
 if ARGV.size < 1
@@ -127,7 +155,9 @@ end
 
 count = nil
 
-document = PDFDocument.new(ARGV[0])
+filepath = Pathname.new(ARGV[0])
+document = PDFDocument.new(filepath)
+document.load
 
 window = Gtk::Window.new
 
@@ -175,7 +205,11 @@ window.signal_connect('key-press-event') do |widget, event|
     when 'G'
       document.go_page(double)
     when 'v'
-      document.invert
+      document.invert()
+    when 'r'
+      document.load()
+    when 'w'
+      document.save()
     when 's'
       if count
         document.splits = count if (1 .. 10) === count
@@ -183,6 +217,7 @@ window.signal_connect('key-press-event') do |widget, event|
         document.splits = document.splits > 1 ? 1 : 2
       end
     when 'q'
+      document.save()
       Gtk.main_quit
   end
 
@@ -197,6 +232,7 @@ window.add(drawing_area)
 page_width, page_height = document.page_size
 window.set_default_size(page_width*2, page_height)
 window.signal_connect("destroy") do
+  document.save
   Gtk.main_quit
   false
 end

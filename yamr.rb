@@ -7,14 +7,25 @@ class PDFDocument
   def initialize(pdf_filename, blank_page_filename=nil)
     if blank_page_filename
     end
+
     @document = Poppler::Document.new(pdf_filename)
+
     total_page = @document.size
+
     @virtual_page = -1
+
     @page_map = []
     (0..total_page-1).each { |i|
       @page_map[i] = i
     }
 
+    @count = 1
+    @invert = false
+
+  end
+
+  def invert
+    @invert = !@invert
   end
 
   def actual_page(virtual_page)
@@ -66,22 +77,26 @@ class PDFDocument
         context.translate(0, (context_height- scale_rate* page_height) / scale_rate / 2)
       end
 
-      render_page(context, @virtual_page + 1)
+      render_page(context, @virtual_page + (@invert ? 1 : 0))
       context.translate(page_width, 0)
-      render_page(context, @virtual_page)
+      render_page(context, @virtual_page + (@invert ? 0 : 1))
     end
   end
 
-  def forward_pages
-    if @virtual_page < (@page_map.size - 2)
-      @virtual_page += 2
+  def forward_pages(n = 2)
+    if @virtual_page < (@page_map.size - n)
+      @virtual_page += n
     end
   end
 
-  def back_pages
+  def back_pages(n = 2)
     if @virtual_page > 0
-      @virtual_page -= 2
+      @virtual_page -= n
     end
+  end
+
+  def go_page(n)
+    @virtual_page = n if 0 < n and n < @page_map.size
   end
 
   def insert_blank_page_to_left
@@ -104,6 +119,8 @@ if ARGV.size < 1
   exit 1
 end
 
+count = nil
+
 document = PDFDocument.new(ARGV[0])
 
 window = Gtk::Window.new
@@ -123,16 +140,42 @@ drawing_area.signal_connect('expose-event') do |widget, event|
 end
 
 window.signal_connect('key-press-event') do |widget, event|
-  case(event.keyval)
-    when 32 #space
-      document.forward_pages
-    when 65288,98 # backspace, b
-      document.back_pages
-    when 108 # l
-      document.insert_blank_page_to_left
-    when 114 # r
-      document.insert_blank_page_to_right
+  c = event.keyval.chr rescue nil
+
+  if '0123456789'.scan(/\d/).include?(c)
+    count = 0 unless count
+    count *= 10
+    count += c.to_i
+    next true
   end
+
+  single = count || 1
+  double = count || 2
+
+  case c
+    when 'j'
+      document.forward_pages(double)
+    when 'k'
+      document.back_pages(double)
+    when 'b'
+      document.insert_blank_page_to_right
+      document.forward_pages(double)
+    when 'H'
+      document.insert_blank_page_to_left
+    when 'L'
+      document.insert_blank_page_to_right
+    when 'g'
+      document.go_page(single)
+    when 'G'
+      document.go_page(double)
+    when 'v'
+      document.invert
+    when 'q'
+      Gtk.main_quit
+  end
+
+  count = nil
+
   drawing_area.signal_emit('expose-event', event)
   true
 end

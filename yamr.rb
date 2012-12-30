@@ -156,7 +156,7 @@ window.signal_connect('key-press-event') do |widget, event|
   end
 
   single = count || 1
-  double = count || 2
+  double = count || document.splits
 
   case c
     when 'j'

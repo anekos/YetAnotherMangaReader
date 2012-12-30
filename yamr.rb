@@ -17,12 +17,12 @@ class PDFDocument
     @pdf_filepath = pdf_filepath.cleanpath.expand_path
     @document = Poppler::Document.new(pdf_filepath.to_s)
 
-    total_page = @document.size
+    @total_page = @document.size
 
     @virtual_page = -1
 
     @page_map = []
-    (0..total_page-1).each { |i|
+    (0..@total_page-1).each { |i|
       @page_map[i] = i
     }
 
@@ -34,6 +34,10 @@ class PDFDocument
 
   def invert
     @invert = !@invert
+  end
+
+  def current_page_number
+    @virtual_page + 2
   end
 
   def actual_page(virtual_page)
@@ -88,7 +92,8 @@ class PDFDocument
 
       splits.times do
         |index|
-        render_page(context, @virtual_page + (@invert ? index : splits - index - 1))
+        page = @virtual_page + (@invert ? index : splits - index)
+        render_page(context, page)
         context.translate(page_width, 0)
       end
     end
@@ -113,7 +118,7 @@ class PDFDocument
   end
 
   def go_page(n)
-    @virtual_page = n if 0 < n and n < @page_map.size
+    @virtual_page = n if -1 <= n and n < @page_map.size
   end
 
   def insert_blank_page_to_left
@@ -154,6 +159,23 @@ class PDFDocument
     }
     File.open(save_filepath, 'w') {|file| file.write(YAML.dump(data)) }
   end
+
+  def caption
+    cpn = current_page_number
+
+    current_page =
+      if splits > 1
+        if @invert
+          "#{cpn}-#{cpn + splits - 1}"
+        else
+          "#{cpn + splits - 1}-#{cpn}"
+        end
+      else
+        "#{cpn}"
+      end
+
+    "#{pdf_filepath.basename.sub_ext('')} [#{current_page}/#{@total_page}]"
+  end
 end
 
 class YAMR
@@ -193,6 +215,8 @@ document = PDFDocument.new(filepath)
 document.load
 
 window = Gtk::Window.new
+
+window.title = document.caption
 
 drawing_area = Gtk::DrawingArea.new
 drawing_area.signal_connect('expose-event') do |widget, event|
@@ -240,7 +264,7 @@ window.signal_connect('key-press-event') do |widget, event|
     when 'L'
       document.insert_blank_page_to_right
     when 'g'
-      document.go_page(single)
+      document.go_page(count || -1)
     when 'G'
       document.go_page(double)
     when 'v'
@@ -268,6 +292,7 @@ window.signal_connect('key-press-event') do |widget, event|
   end
 
   count = nil
+  window.title = document.caption
 
   drawing_area.signal_emit('expose-event', event)
   true

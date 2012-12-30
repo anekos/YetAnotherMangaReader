@@ -275,7 +275,7 @@ window.signal_connect('key-press-event') do |widget, event|
     when 'g'
       document.go_page(count ? (count - 1) / document.splits * document.splits + 1 : 1)
     when 'G'
-      document.go_page(count ? document.splits * (count - 1) + 1 : -document.splits)
+      document.go_page(count || -document.splits)
     when 'v'
       document.invert()
     when 'r'
@@ -291,6 +291,8 @@ window.signal_connect('key-press-event') do |widget, event|
     when 'q'
       document.save()
       Gtk.main_quit
+    else
+      next
   end
 
   if save_counter > 10

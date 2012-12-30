@@ -261,6 +261,10 @@ window.signal_connect('key-press-event') do |widget, event|
         document = PDFDocument.new(previous_file) if previous_file
         document.go_page(-document.splits)
       end
+    when 'J'
+      document.forward_pages(single)
+    when 'K'
+      document.back_pages(single)
     when 'b'
       document.insert_blank_page_to_right
       document.forward_pages(double)

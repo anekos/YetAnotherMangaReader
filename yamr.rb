@@ -7,22 +7,20 @@ require 'pathname'
 require 'yaml'
 
 class PDFDocument
+  SAVE_NAMES = %W[invert splits virutal_page_number].map(&:intern)
+
   attr_accessor :splits
-  attr_reader :pdf_filepath
+  attr_reader :filepath
 
-  def initialize(pdf_filepath, blank_page_filename=nil)
-    if blank_page_filename
-    end
+  def initialize(filepath)
+    @filepath = filepath.cleanpath.expand_path
+    @document = Poppler::Document.new(filepath.to_s)
 
-    @pdf_filepath = pdf_filepath.cleanpath.expand_path
-    @document = Poppler::Document.new(pdf_filepath.to_s)
-
-    @total_page = @document.size
-
-    @virtual_page = -1
+    @total_pages = @document.size
+    @virutal_page_number = -1
 
     @page_map = []
-    (0..@total_page-1).each { |i|
+    (0..@total_pages-1).each { |i|
       @page_map[i] = i
     }
 
@@ -37,29 +35,29 @@ class PDFDocument
   end
 
   def current_page_number
-    @virtual_page + 2
+    @virutal_page_number + 2
   end
 
-  def actual_page(virtual_page)
-      if virtual_page > -1 && virtual_page < @page_map.size && @page_map[virtual_page]
-        return @page_map[virtual_page]
-      end
-      return nil
-  end
-
-  def page_size(virtual_page=0)
-    actual_page = actual_page(virtual_page)
-    if actual_page
-      return @document[actual_page].size
+  def actual_page (virutal_page_number)
+    if virutal_page_number > -1 and virutal_page_number < @page_map.size and @page_map[virutal_page_number]
+      @page_map[virutal_page_number]
+    else
+      nil
     end
-    return nil
   end
 
-  def render_page(context, virtual_page)
+  def page_size (virutal_page_number = 0)
+    if ap = actual_page(virutal_page_number)
+      @document[ap].size
+    else
+      nil
+    end
+  end
+
+  def render_page(context, virutal_page_number)
     begin
-      actual_page = actual_page(virtual_page)
-      if actual_page
-        context.render_poppler_page(@document[actual_page])
+      if ap = actual_page(virutal_page_number)
+        context.render_poppler_page(@document[ap])
       end
     rescue
     end
@@ -71,7 +69,7 @@ class PDFDocument
       page_size = nil
       (splits.downto 0).any? do
         |index|
-        page_size = self.page_size(@virtual_page + index)
+        page_size = self.page_size(@virutal_page_number + index)
       end
       return unless page_size
 
@@ -92,7 +90,7 @@ class PDFDocument
 
       splits.times do
         |index|
-        page = @virtual_page + (@invert ? index : splits - index)
+        page = @virutal_page_number + (@invert ? index : splits - index)
         render_page(context, page)
         context.translate(page_width, 0)
       end
@@ -100,8 +98,8 @@ class PDFDocument
   end
 
   def forward_pages(n = 2)
-    if current_page_number < (@total_page - n)
-      @virtual_page += n
+    if current_page_number < (@total_pages - n)
+      @virutal_page_number += n
       true
     else
       false
@@ -110,7 +108,7 @@ class PDFDocument
 
   def back_pages(n = 2)
     if current_page_number > n
-      @virtual_page -= n
+      @virutal_page_number -= n
       true
     else
       false
@@ -118,23 +116,23 @@ class PDFDocument
   end
 
   def go_page(n)
-    n = @total_page + n + 1 if n < 0
+    n = @total_pages + n + 1 if n < 0
     n -= 2
-    @virtual_page = n if -1 <= n and n < @page_map.size
+    @virutal_page_number = n if -1 <= n and n < @page_map.size
   end
 
   def insert_blank_page_to_left
     begin
-      @total_page += 1
-      @page_map.insert(@virtual_page + 1 , nil)
+      @total_pages += 1
+      @page_map.insert(@virutal_page_number + 1 , nil)
     rescue
     end
   end
 
   def insert_blank_page_to_right
     begin
-      @total_page += 1
-      @page_map.insert(@virtual_page, nil)
+      @total_pages += 1
+      @page_map.insert(@virutal_page_number, nil)
     rescue
     end
   end
@@ -144,23 +142,26 @@ class PDFDocument
   end
 
   def load(save_filepath = default_save_filepath)
-    data = (YAML.load_file(save_filepath) rescue {})[@pdf_filepath.cleanpath.expand_path.to_s]
+    data = (YAML.load_file(save_filepath) rescue {})[@filepath.cleanpath.expand_path.to_s]
     return false unless data
-    %W[invert splits virtual_page].each do
+
+    SAVE_NAMES.each do
       |name|
       current = self.instance_variable_get("@#{name}")
-      self.instance_variable_set("@#{name}", data[name.intern] || current)
+      self.instance_variable_set("@#{name}", data[name] || current)
     end
   end
 
   def save(save_filepath = default_save_filepath)
     data = (YAML.load_file(save_filepath) rescue {})
-    key = @pdf_filepath.cleanpath.expand_path.to_s
-    data[key] = {
-      :invert => @invert,
-      :splits => splits,
-      :virtual_page => @virtual_page
-    }
+    key = @filepath.cleanpath.expand_path.to_s
+
+    data[key] = {}
+    SAVE_NAMES.each do
+      |name|
+      data[key][name] = self.instance_variable_get("@#{name}")
+    end
+
     File.open(save_filepath, 'w') {|file| file.write(YAML.dump(data)) }
   end
 
@@ -178,7 +179,7 @@ class PDFDocument
         "#{cpn}"
       end
 
-    "#{pdf_filepath.basename.sub_ext('')} [#{current_page}/#{@total_page}]"
+    "#{filepath.basename.sub_ext('')} [#{current_page}/#{@total_pages}]"
   end
 end
 
@@ -250,49 +251,49 @@ window.signal_connect('key-press-event') do |widget, event|
   double = single * document.splits
 
   case c
-    when 'j'
-      unless document.forward_pages(double)
-        next_file = YAMR.next_file(document.pdf_filepath)
-        document = PDFDocument.new(next_file) if next_file
-      end
-    when 'k'
-      unless document.back_pages(double)
-        previous_file = YAMR.previous_file(document.pdf_filepath)
-        document = PDFDocument.new(previous_file) if previous_file
-        document.go_page(-document.splits)
-      end
-    when 'J'
-      document.forward_pages(single)
-    when 'K'
-      document.back_pages(single)
-    when 'b'
-      document.insert_blank_page_to_right
-      document.forward_pages(double)
-    when 'H'
-      document.insert_blank_page_to_left
-    when 'L'
-      document.insert_blank_page_to_right
-    when 'g'
-      document.go_page(count ? (count - 1) / document.splits * document.splits + 1 : 1)
-    when 'G'
-      document.go_page(count || -document.splits)
-    when 'v'
-      document.invert()
-    when 'r'
-      document.load()
-    when 'w'
-      document.save()
-    when 's'
-      if count
-        document.splits = count if (1 .. 10) === count
-      else
-        document.splits = document.splits > 1 ? 1 : 2
-      end
-    when 'q'
-      document.save()
-      Gtk.main_quit
+  when 'j'
+    unless document.forward_pages(double)
+      next_file = YAMR.next_file(document.filepath)
+      document = PDFDocument.new(next_file) if next_file
+    end
+  when 'k'
+    unless document.back_pages(double)
+      previous_file = YAMR.previous_file(document.filepath)
+      document = PDFDocument.new(previous_file) if previous_file
+      document.go_page(-document.splits)
+    end
+  when 'J'
+    document.forward_pages(single)
+  when 'K'
+    document.back_pages(single)
+  when 'b'
+    document.insert_blank_page_to_right
+    document.forward_pages(double)
+  when 'H'
+    document.insert_blank_page_to_left
+  when 'L'
+    document.insert_blank_page_to_right
+  when 'g'
+    document.go_page(count ? (count - 1) / document.splits * document.splits + 1 : 1)
+  when 'G'
+    document.go_page(count || -document.splits)
+  when 'v'
+    document.invert()
+  when 'r'
+    document.load()
+  when 'w'
+    document.save()
+  when 's'
+    if count
+      document.splits = count if (1 .. 10) === count
     else
-      next
+      document.splits = document.splits > 1 ? 1 : 2
+    end
+  when 'q'
+    document.save()
+    Gtk.main_quit
+  else
+    next
   end
 
   if save_counter > 10

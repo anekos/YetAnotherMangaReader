@@ -237,6 +237,10 @@ class YAMR
     @window.add(@drawing_area)
     @drawing_area.signal_connect('expose-event', &self.method(:on_expose_event))
 
+    @window.set_events(Gdk::Event::BUTTON_PRESS_MASK)
+    @drawing_area.signal_connect('scroll-event', &self.method(:on_scroll_event))
+    @window.signal_connect('scroll-event', &self.method(:on_scroll_event))
+
     page_size = @document.get_page_size
     @window.set_default_size(page_size.width * @document.splits, page_size.height)
     @window.signal_connect("destroy") do
@@ -261,6 +265,16 @@ class YAMR
     true
   end
 
+  def on_scroll_event (widget, event)
+    case event.direction
+    when Gdk::EventScroll::Direction::DOWN
+      go_next_page(@document.splits)
+    when Gdk::EventScroll::Direction::UP
+      go_previous_page(@document.splits)
+    end
+    repaint(event)
+  end
+
   def on_key_press_event (widget, event)
     c = event.keyval.chr rescue nil
 
@@ -276,16 +290,9 @@ class YAMR
 
     case c
     when 'j'
-      unless @document.forward_pages(double)
-        next_file = YAMR.next_file(@document.filepath)
-        @document = PDFDocument.new(next_file) if next_file
-      end
+      go_next_page(double)
     when 'k'
-      unless @document.back_pages(double)
-        previous_file = YAMR.previous_file(@document.filepath)
-        @document = PDFDocument.new(previous_file) if previous_file
-        @document.current_page_number = -@document.splits
-      end
+      go_previous_page(double)
     when 'J'
       @document.forward_pages(single)
     when 'K'
@@ -328,14 +335,34 @@ class YAMR
     end
 
     @count = nil
-    @drawing_area.signal_emit('expose-event', event)
 
-    update_title
+    repaint(event)
+
     true
+  end
+
+  def repaint (event)
+    @drawing_area.signal_emit('expose-event', event)
+    update_title
   end
 
   def update_title
     @window.title = @document.caption
+  end
+
+  def go_next_page (n)
+    unless @document.forward_pages(n)
+      next_file = YAMR.next_file(@document.filepath)
+      @document = PDFDocument.new(next_file) if next_file
+    end
+  end
+
+  def go_previous_page (n)
+    unless @document.back_pages(n)
+      previous_file = YAMR.previous_file(@document.filepath)
+      @document = PDFDocument.new(previous_file) if previous_file
+      @document.current_page_number = -@document.splits
+    end
   end
 end
 

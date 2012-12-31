@@ -331,8 +331,6 @@ class YAMR
     end
 
     @count = nil
-    @window.title = @document.caption
-
     @drawing_area.signal_emit('expose-event', event)
 
     update_title

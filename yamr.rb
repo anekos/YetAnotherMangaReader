@@ -352,15 +352,22 @@ class YAMR
   def go_next_page (n)
     unless @document.forward_pages(n)
       next_file = YAMR.next_file(@document.filepath)
-      @document = PDFDocument.new(next_file) if next_file
+      if next_file
+        @document = PDFDocument.new(next_file)
+        @document.load
+        @document.current_page_number = 1
+      end
     end
   end
 
   def go_previous_page (n)
     unless @document.back_pages(n)
       previous_file = YAMR.previous_file(@document.filepath)
-      @document = PDFDocument.new(previous_file) if previous_file
-      @document.current_page_number = -@document.splits
+      if previous_file
+        @document = PDFDocument.new(previous_file)
+        @document.load
+        @document.current_page_number = -@document.splits
+      end
     end
   end
 end

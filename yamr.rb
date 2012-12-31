@@ -6,15 +6,13 @@ require 'poppler'
 require 'pathname'
 require 'yaml'
 
-class PDFDocument
-  Size = Struct.new(:width, :height)
-
-  class Size
-    def to_f
-      Size.new(*self.to_a.map(&:to_f))
-    end
+class Size < Struct.new(:width, :height)
+  def to_f
+    Size.new(*self.to_a.map(&:to_f))
   end
+end
 
+class PDFDocument
   SAVE_NAMES = %W[invert splits virutal_page_number].map(&:intern)
 
   attr_accessor :splits
@@ -66,7 +64,7 @@ class PDFDocument
     @virutal_page_number = n if -1 <= n and n < @page_map.size
   end
 
-  def draw (context, context_width, context_height)
+  def draw (context, context_size)
     context.save do
 
       page_size = nil
@@ -78,17 +76,16 @@ class PDFDocument
 
       page_size = page_size.to_f
 
-      context_width = context_width.to_f
-      context_height = context_height.to_f
+      context_size = context_size.to_f
 
-      if (context_width / context_height) >= (page_size.width * splits / page_size.height)
-        scale_rate = context_height / page_size.height
+      if (context_size.width.to_f / context_size.height.to_f) >= (page_size.width * splits / page_size.height)
+        scale_rate = context_size.height.to_f / page_size.height
         context.scale(scale_rate, scale_rate)
-        context.translate((context_width - scale_rate* splits * page_size.width) / scale_rate / splits, 0)
+        context.translate((context_size.width.to_f - scale_rate * splits * page_size.width) / scale_rate / splits, 0)
       else
-        scale_rate = context_width / page_size.width / splits
+        scale_rate = context_size.height.to_f / page_size.width / splits
         context.scale(scale_rate, scale_rate)
-        context.translate(0, (context_height- scale_rate* page_size.height) / scale_rate / splits)
+        context.translate(0, (context_size.height.to_f - scale_rate * page_size.height) / scale_rate / splits)
       end
 
       splits.times do
@@ -260,7 +257,7 @@ class YAMR
     context.rectangle(0, 0, w, h)
     context.fill
 
-    @document.draw(context, w, h)
+    @document.draw(context, Size.new(w, h))
     true
   end
 

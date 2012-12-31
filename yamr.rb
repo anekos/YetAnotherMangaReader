@@ -28,9 +28,7 @@ class PDFDocument
     @virutal_page_number = -1
 
     @page_map = []
-    (0..@total_pages-1).each { |i|
-      @page_map[i] = i
-    }
+    (0 .. @total_pages - 1).each {|i| @page_map[i] = i }
 
     @count = 1
     @invert = false
@@ -62,13 +60,13 @@ class PDFDocument
     @virutal_page_number + 2
   end
 
-  def current_page_number=(n)
+  def current_page_number= (n)
     n = @total_pages + n + 1 if n < 0
     n -= 2
     @virutal_page_number = n if -1 <= n and n < @page_map.size
   end
 
-  def draw(context, context_width, context_height)
+  def draw (context, context_width, context_height)
     context.save do
 
       page_size = nil
@@ -102,7 +100,7 @@ class PDFDocument
     end
   end
 
-  def forward_pages(n = splits)
+  def forward_pages (n = splits)
     if current_page_number < (@total_pages - n)
       @virutal_page_number += n
       true
@@ -111,7 +109,7 @@ class PDFDocument
     end
   end
 
-  def back_pages(n = splits)
+  def back_pages (n = splits)
     if current_page_number > n
       @virutal_page_number -= n
       true
@@ -136,7 +134,7 @@ class PDFDocument
     end
   end
 
-  def load(save_filepath = default_save_filepath)
+  def load (save_filepath = default_save_filepath)
     return unless data = (YAML.load_file(save_filepath) rescue {})[@filepath.cleanpath.expand_path.to_s]
 
     SAVE_NAMES.each do
@@ -146,7 +144,7 @@ class PDFDocument
     end
   end
 
-  def save(save_filepath = default_save_filepath)
+  def save (save_filepath = default_save_filepath)
     data = (YAML.load_file(save_filepath) rescue {})
     key = @filepath.cleanpath.expand_path.to_s
 
@@ -177,7 +175,7 @@ class PDFDocument
     end
   end
 
-  def render_page(context, virutal_page_number)
+  def render_page (context, virutal_page_number)
     begin
       if ap = actual_page(virutal_page_number)
         context.render_poppler_page(@document[ap])
@@ -192,21 +190,21 @@ class PDFDocument
 end
 
 class YAMR
-  def self.next_file(filepath)
+  def self.next_file (filepath)
     es, i = self.get_dir_info(filepath)
     return nil unless i
     i += 1
     i < es.size ? es[i] : es.first
   end
 
-  def self.previous_file(filepath)
+  def self.previous_file (filepath)
     es, i = self.get_dir_info(filepath)
     return nil unless i
     i -= 1
     i >= 0 ? es[i] : es.last
   end
 
-  def self.get_dir_info(filepath)
+  def self.get_dir_info (filepath)
     dir = filepath.dirname
     es = dir.entries.sort.map {|it| (dir + it).cleanpath.expand_path }
     i = es.index(filepath)
@@ -338,7 +336,6 @@ class YAMR
     @drawing_area.signal_emit('expose-event', event)
 
     update_title
-
     true
   end
 
@@ -353,8 +350,6 @@ if ARGV.size < 1
   exit 1
 end
 
-
-filepath = Pathname.new(ARGV[0])
 app = YAMR.new
-app.open(filepath)
+app.open(Pathname.new(ARGV[0]))
 app.start

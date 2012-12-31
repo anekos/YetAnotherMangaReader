@@ -75,7 +75,6 @@ class PDFDocument
       return unless page_size
 
       page_size = page_size.to_f
-
       context_size = context_size.to_f
 
       if (context_size.width.to_f / context_size.height.to_f) >= (page_size.width * splits / page_size.height)
@@ -83,7 +82,7 @@ class PDFDocument
         context.scale(scale_rate, scale_rate)
         context.translate((context_size.width.to_f - scale_rate * splits * page_size.width) / scale_rate / splits, 0)
       else
-        scale_rate = context_size.height.to_f / page_size.width / splits
+        scale_rate = context_size.width.to_f / (page_size.width * splits)
         context.scale(scale_rate, scale_rate)
         context.translate(0, (context_size.height.to_f - scale_rate * page_size.height) / scale_rate / splits)
       end

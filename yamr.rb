@@ -202,7 +202,7 @@ class YAMR
 
   def self.get_dir_info (filepath)
     dir = filepath.dirname
-    es = dir.entries.sort.map {|it| (dir + it).cleanpath.expand_path }
+    es = dir.entries.select {|it| /\A\.pdf\Z/i === it.extname } .sort.map {|it| (dir + it).cleanpath.expand_path }
     i = es.index(filepath)
     return es, i
   end

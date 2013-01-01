@@ -97,7 +97,7 @@ class PDFDocument
   end
 
   def forward_pages (n = splits)
-    if current_page_number < (@total_pages - n)
+    if current_page_number <= (@total_pages - n)
       @virutal_page_number += n
       true
     else
@@ -351,6 +351,7 @@ class YAMR
 
   def go_next_page (n)
     unless @document.forward_pages(n)
+      @document.save
       next_file = YAMR.next_file(@document.filepath)
       if next_file
         @document = PDFDocument.new(next_file)
@@ -362,6 +363,7 @@ class YAMR
 
   def go_previous_page (n)
     unless @document.back_pages(n)
+      @document.save
       previous_file = YAMR.previous_file(@document.filepath)
       if previous_file
         @document = PDFDocument.new(previous_file)

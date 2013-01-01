@@ -13,7 +13,7 @@ class Size < Struct.new(:width, :height)
 end
 
 class PDFDocument
-  SAVE_NAMES = %W[invert splits virutal_page_number].map(&:intern)
+  SAVE_NAMES = %W[invert splits virtual_page_number].map(&:intern)
 
   attr_accessor :splits
   attr_reader :filepath
@@ -23,7 +23,7 @@ class PDFDocument
     @document = Poppler::Document.new(filepath.to_s)
 
     @total_pages = @document.size
-    @virutal_page_number = -1
+    @virtual_page_number = -1
 
     @page_map = []
     (0 .. @total_pages - 1).each {|i| @page_map[i] = i }
@@ -55,13 +55,13 @@ class PDFDocument
   end
 
   def current_page_number
-    @virutal_page_number + 2
+    @virtual_page_number + 2
   end
 
   def current_page_number= (n)
     n = @total_pages + n + 1 if n < 0
     n -= 2
-    @virutal_page_number = n if -1 <= n and n < @page_map.size
+    @virtual_page_number = n if -1 <= n and n < @page_map.size
   end
 
   def draw (context, context_size)
@@ -70,7 +70,7 @@ class PDFDocument
       page_size = nil
       (splits.downto 0).any? do
         |index|
-        page_size = self.get_page_size(@virutal_page_number + index)
+        page_size = self.get_page_size(@virtual_page_number + index)
       end
       return unless page_size
 
@@ -89,7 +89,7 @@ class PDFDocument
 
       splits.times do
         |index|
-        page = @virutal_page_number + (@invert ? index : splits - index)
+        page = @virtual_page_number + (@invert ? index : splits - index)
         render_page(context, page)
         context.translate(page_size.width, 0)
       end
@@ -98,7 +98,7 @@ class PDFDocument
 
   def forward_pages (n = splits)
     if current_page_number <= (@total_pages - n)
-      @virutal_page_number += n
+      @virtual_page_number += n
       true
     else
       false
@@ -107,7 +107,7 @@ class PDFDocument
 
   def back_pages (n = splits)
     if current_page_number > n
-      @virutal_page_number -= n
+      @virtual_page_number -= n
       true
     else
       false
@@ -117,7 +117,7 @@ class PDFDocument
   def insert_blank_page_to_left
     begin
       @total_pages += 1
-      @page_map.insert(@virutal_page_number + 1 , nil)
+      @page_map.insert(@virtual_page_number + 1 , nil)
     rescue
     end
   end
@@ -125,7 +125,7 @@ class PDFDocument
   def insert_blank_page_to_right
     begin
       @total_pages += 1
-      @page_map.insert(@virutal_page_number, nil)
+      @page_map.insert(@virtual_page_number, nil)
     rescue
     end
   end
@@ -153,8 +153,8 @@ class PDFDocument
     File.open(save_filepath, 'w') {|file| file.write(YAML.dump(data)) }
   end
 
-  def get_page_size (virutal_page_number = 0)
-    if ap = actual_page(virutal_page_number)
+  def get_page_size (virtual_page_number = 0)
+    if ap = actual_page(virtual_page_number)
       Size.new(*@document[ap].size)
     else
       nil
@@ -163,17 +163,17 @@ class PDFDocument
 
   private
 
-  def actual_page (virutal_page_number)
-    if virutal_page_number > -1 and virutal_page_number < @page_map.size and @page_map[virutal_page_number]
-      @page_map[virutal_page_number]
+  def actual_page (virtual_page_number)
+    if virtual_page_number > -1 and virtual_page_number < @page_map.size and @page_map[virtual_page_number]
+      @page_map[virtual_page_number]
     else
       nil
     end
   end
 
-  def render_page (context, virutal_page_number)
+  def render_page (context, virtual_page_number)
     begin
-      if ap = actual_page(virutal_page_number)
+      if ap = actual_page(virtual_page_number)
         context.render_poppler_page(@document[ap])
       end
     rescue

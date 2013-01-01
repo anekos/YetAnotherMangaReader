@@ -13,9 +13,9 @@ class Size < Struct.new(:width, :height)
 end
 
 class PDFDocument
-  SAVE_NAMES = %W[invert splits virtual_page_number].map(&:intern)
+  SAVE_NAMES = %W[invert splits page_index].map(&:intern)
 
-  attr_accessor :splits
+  attr_accessor :splits, :page_index
   attr_reader :filepath
 
   def initialize(filepath)
@@ -23,7 +23,7 @@ class PDFDocument
     @document = Poppler::Document.new(filepath.to_s)
 
     @total_pages = @document.size
-    @virtual_page_number = -1
+    @page_index = 0
 
     @page_map = []
     (0 .. @total_pages - 1).each {|i| @page_map[i] = i }
@@ -34,17 +34,17 @@ class PDFDocument
   end
 
   def caption
-    cpn = current_page_number
+    pn = page_number
 
     current_page =
       if splits > 1
         if @invert
-          "#{cpn}-#{cpn + splits - 1}"
+          "#{pn}-#{pn + splits - 1}"
         else
-          "#{cpn + splits - 1}-#{cpn}"
+          "#{pn + splits - 1}-#{pn}"
         end
       else
-        "#{cpn}"
+        "#{pn}"
       end
 
     "#{filepath.basename.sub_ext('')} [#{current_page}/#{@total_pages}]"
@@ -54,23 +54,27 @@ class PDFDocument
     @invert = !@invert
   end
 
-  def current_page_number
-    @virtual_page_number + 2
+  def page_number
+    self.page_index + 1
   end
 
-  def current_page_number= (n)
-    n = @total_pages + n + 1 if n < 0
-    n -= 2
-    @virtual_page_number = n if -1 <= n and n < @page_map.size
+  def page_number= (n)
+    self.page_index = n - 1
+  end
+
+  def page_index= (n)
+    n = @total_pages + n if n < 0
+    @page_index = n if 0 <= n and n < @total_pages
+    @page_index
   end
 
   def draw (context, context_size)
     context.save do
 
       page_size = nil
-      (splits.downto 0).any? do
+      ((splits - 1).downto 0).any? do
         |index|
-        page_size = self.get_page_size(@virtual_page_number + index)
+        page_size = self.get_page_size(@page_index + index)
       end
       return unless page_size
 
@@ -89,7 +93,7 @@ class PDFDocument
 
       splits.times do
         |index|
-        page = @virtual_page_number + (@invert ? index + 1 : splits - index)
+        page = @page_index + (@invert ? index : splits - index - 1)
         render_page(context, page)
         context.translate(page_size.width, 0)
       end
@@ -97,27 +101,21 @@ class PDFDocument
   end
 
   def forward_pages (n = splits)
-    if current_page_number <= (@total_pages - n)
-      @virtual_page_number += n
-      true
-    else
-      false
-    end
+    old = self.page_index
+    self.page_index += n
+    old != self.page_index
   end
 
   def back_pages (n = splits)
-    if current_page_number > n
-      @virtual_page_number -= n
-      true
-    else
-      false
-    end
+    old = self.page_index
+    self.page_index -= n
+    old != self.page_index
   end
 
   def insert_blank_page_to_left
     begin
       @total_pages += 1
-      @page_map.insert(@virtual_page_number + 1 , nil)
+      @page_map.insert(@page_index + 1 , nil)
     rescue
     end
   end
@@ -125,7 +123,7 @@ class PDFDocument
   def insert_blank_page_to_right
     begin
       @total_pages += 1
-      @page_map.insert(@virtual_page_number, nil)
+      @page_map.insert(@page_index, nil)
     rescue
     end
   end
@@ -153,8 +151,8 @@ class PDFDocument
     File.open(save_filepath, 'w') {|file| file.write(YAML.dump(data)) }
   end
 
-  def get_page_size (virtual_page_number = 0)
-    if ap = actual_page(virtual_page_number)
+  def get_page_size (index)
+    if ap = actual_page(index)
       Size.new(*@document[ap].size)
     else
       nil
@@ -163,20 +161,21 @@ class PDFDocument
 
   private
 
-  def actual_page (virtual_page_number)
-    if virtual_page_number > -1 and virtual_page_number < @page_map.size and @page_map[virtual_page_number]
-      @page_map[virtual_page_number]
+  def actual_page (index)
+    if (0 ... @total_pages) === index
+      @page_map[index]
     else
       nil
     end
   end
 
-  def render_page (context, virtual_page_number)
+  def render_page (context, index)
     begin
-      if ap = actual_page(virtual_page_number)
+      if ap = actual_page(index)
         context.render_poppler_page(@document[ap])
       end
-    rescue
+    rescue => e
+      puts e
     end
   end
 
@@ -240,7 +239,7 @@ class YAMR
     @drawing_area.signal_connect('scroll-event', &self.method(:on_scroll_event))
     @window.signal_connect('scroll-event', &self.method(:on_scroll_event))
 
-    page_size = @document.get_page_size
+    page_size = @document.get_page_size(0)
     @window.set_default_size(page_size.width * @document.splits, page_size.height)
     @window.signal_connect("destroy") do
       document.save
@@ -304,9 +303,9 @@ class YAMR
     when 'L'
       @document.insert_blank_page_to_right
     when 'g'
-      @document.current_page_number = @count ? (@count - 1) / @document.splits * @document.splits + 1 : 1
+      @document.page_number = @count ? (@count - 1) / @document.splits * @document.splits + 1 : 1
     when 'G'
-      @document.current_page_number = @count || -@document.splits
+      @document.page_number = @count || -@document.splits + 1
     when 'v'
       @document.invert()
     when 'r'
@@ -356,7 +355,7 @@ class YAMR
       if next_file
         @document = PDFDocument.new(next_file)
         @document.load
-        @document.current_page_number = 1
+        @document.page_number = 1
       end
     end
   end
@@ -368,7 +367,7 @@ class YAMR
       if previous_file
         @document = PDFDocument.new(previous_file)
         @document.load
-        @document.current_page_number = -@document.splits
+        @document.page_number = -@document.splits
       end
     end
   end

@@ -101,15 +101,23 @@ class PDFDocument
   end
 
   def forward_pages (n = splits)
-    old = self.page_index
-    self.page_index += n
-    old != self.page_index
+    pi = self.page_index + n
+    if (0 ... @total_pages) === pi
+      self.page_index = pi
+      true
+    else
+      false
+    end
   end
 
   def back_pages (n = splits)
-    old = self.page_index
-    self.page_index -= n
-    old != self.page_index
+    pi = self.page_index - n
+    if (0 ... @total_pages) === pi
+      self.page_index = pi
+      true
+    else
+      false
+    end
   end
 
   def insert_blank_page_to_left

@@ -136,6 +136,11 @@ class PDFDocument
       current = self.instance_variable_get("@#{name}")
       self.instance_variable_set("@#{name}", data[name] || current)
     end
+
+    (data[:blank_pages] || []).each do
+      |page|
+      @page_map.insert(page, nil)
+    end
   end
 
   def save (save_filepath = default_save_filepath)
@@ -147,6 +152,10 @@ class PDFDocument
       |name|
       data[key][name] = self.instance_variable_get("@#{name}")
     end
+
+    blank_pages = []
+    @page_map.each_with_index {|v, k| blank_pages << k unless v }
+    data[key][:blank_pages] = blank_pages
 
     File.open(save_filepath, 'w') {|file| file.write(YAML.dump(data)) }
   end

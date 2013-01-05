@@ -13,10 +13,10 @@ class Size < Struct.new(:width, :height)
 end
 
 class PDFDocument
-  SAVE_NAMES = %W[invert splits page_index].map(&:intern)
+  SAVE_NAMES = %W[inverted splits page_index].map(&:intern)
 
-  attr_accessor :splits, :page_index
-  attr_reader :filepath
+  attr_accessor :splits, :page_index, :inverted
+  attr_reader :filepath, :loaded
 
   def initialize(filepath)
     @filepath = filepath.cleanpath.expand_path
@@ -29,8 +29,9 @@ class PDFDocument
     (0 .. @total_pages - 1).each {|i| @page_map[i] = i }
 
     @count = 1
-    @invert = false
+    @inverted = false
     @splits = 2
+    @loaded = false
   end
 
   def caption
@@ -38,7 +39,7 @@ class PDFDocument
 
     current_page =
       if splits > 1
-        if @invert
+        if @inverted
           "#{pn}-#{pn + splits - 1}"
         else
           "#{pn + splits - 1}-#{pn}"
@@ -51,7 +52,7 @@ class PDFDocument
   end
 
   def invert
-    @invert = !@invert
+    @inverted = !@inverted
   end
 
   def page_number
@@ -93,7 +94,7 @@ class PDFDocument
 
       splits.times do
         |index|
-        page = @page_index + (@invert ? index : splits - index - 1)
+        page = @page_index + (@inverted ? index : splits - index - 1)
         render_page(context, page)
         context.translate(page_size.width, 0)
       end
@@ -149,6 +150,9 @@ class PDFDocument
       |page|
       @page_map.insert(page, nil)
     end
+
+    @loaded = true
+    return true
   end
 
   def save (save_filepath = default_save_filepath)
@@ -223,22 +227,37 @@ class YAMR
     return es, i
   end
 
+  attr_reader :events
+
   def initialize
     @count = nil
     @save_counter = 0
     @filepath = nil
     @document = nil
+    @events = {}
+
+    rcfile_path = Pathname.new(ENV['HOME']) + '.yamrrc'
+    if rcfile_path.exist?
+      rcfile = RCFile.new(self)
+      rcfile.instance_eval(File.read(rcfile_path))
+    end
   end
 
   def open (filepath)
     @document = PDFDocument.new(filepath)
     @document.load
+    call_event(:on_open, @document)
   end
 
   def start
     initialize_window
     @window.show_all
     Gtk.main
+  end
+
+  def call_event (name, *args)
+    return unless event = @events[name.intern]
+    event.call(*args)
   end
 
   private
@@ -370,8 +389,7 @@ class YAMR
       @document.save
       next_file = YAMR.next_file(@document.filepath)
       if next_file
-        @document = PDFDocument.new(next_file)
-        @document.load
+        self.open(next_file)
         @document.page_number = 1
       end
     end
@@ -382,11 +400,20 @@ class YAMR
       @document.save
       previous_file = YAMR.previous_file(@document.filepath)
       if previous_file
-        @document = PDFDocument.new(previous_file)
-        @document.load
+        self.open(previous_file)
         @document.page_number = -@document.splits
       end
     end
+  end
+end
+
+class RCFile
+  def initialize (app)
+    @app = app
+  end
+
+  def on_open (&block)
+    @app.events[:on_open] = block
   end
 end
 

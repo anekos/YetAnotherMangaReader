@@ -39,14 +39,23 @@ $HOME/.yamr.saves にファイルごとの状態を保持します。
 
 ## rc ファイル
 
+$HOME/.yamrrc を起動時にロードします。
+中は ruby のコードで、現状ではドキュメントを開いたときの、挙動を設定できます。
+
+
+
 ```ruby
 on_open {
   |doc|
+  # 状態がロードされたか(セーブ済みだったか)
   if doc.loaded
   else
+    # 空白ページを冒頭に挿入
     doc.insert_blank_page_to_left
   end
+  # 雑誌フォルダに入っているか？
   if /magazine/ === doc.filepath.to_s
+    # 見開きを逆にする
     doc.invert
   end
 }

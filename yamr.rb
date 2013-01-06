@@ -192,12 +192,14 @@ class PDFDocument
     File.open(save_filepath, 'w') {|file| file.write(YAML.dump(data)) }
   end
 
-  def get_page_size (index)
-    if ap = actual_page(index)
-      Size.new(*@document[ap].size)
-    else
-      nil
-    end
+  def get_page_size (index, skip_blank_page = false)
+    begin
+      if ap = actual_page(index)
+        return Size.new(*@document[ap].size)
+      end
+      index += 1
+    end while skip_blank_page and index < @total_pages
+    nil
   end
 
   def mark (c)
@@ -308,7 +310,7 @@ class YAMR
     @drawing_area.signal_connect('scroll-event', &self.method(:on_scroll_event))
     @window.signal_connect('scroll-event', &self.method(:on_scroll_event))
 
-    page_size = @document.get_page_size(0)
+    page_size = @document.get_page_size(0, true)
     @window.set_default_size(page_size.width * @document.splits, page_size.height)
     @window.signal_connect("destroy") do
       document.save

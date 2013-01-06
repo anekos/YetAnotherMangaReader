@@ -47,17 +47,18 @@ $HOME/.yamrrc を起動時にロードします。
 ```ruby
 on_open {
   |doc|
-  # 状態がロードされたか(セーブ済みだったか)
-  if doc.loaded
-  else
-    # 空白ページを冒頭に挿入
-    doc.insert_blank_page_to_left
-  end
-  # 雑誌フォルダに入っているか？
-  if /magazine/ === doc.filepath.to_s
-    # 見開きを逆にする
-    doc.invert
-  end
+  # 状態がロード済みなら、何もしない
+  next if doc.loaded
+
+  # ディレクトリ名 / ファイル名
+  dname = doc.filepath.parent.to_s
+  fname = doc.filepath.basename.to_s
+
+  # 先頭に空白ページを追加
+  doc.first_blank_page = true
+
+  # 見開きを逆にする (雑誌の Web+BD Press の時)
+  doc.inverted = true if /magazine/ === dname and /Web\+DB/ === fname
 }
 
 ```

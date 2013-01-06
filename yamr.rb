@@ -138,14 +138,23 @@ class PDFDocument
     end
   end
 
-  def toggle_first_blank_page
-    if @page_map.first
+  def first_blank_page= (v)
+    if v and !self.first_blank_page
       @total_pages += 1
       @page_map.insert(0, nil)
-    else
+    elsif !v and self.first_blank_page
       @total_pages -= 1
       @page_map.delete_at(0)
     end
+    self.first_blank_page
+  end
+
+  def first_blank_page
+    !@page_map.first
+  end
+
+  def toggle_first_blank_page
+    self.first_blank_page = !self.first_blank_page
   end
 
   def load (save_filepath = default_save_filepath)

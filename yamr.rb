@@ -13,7 +13,7 @@ class Size < Struct.new(:width, :height)
 end
 
 class PDFDocument
-  SAVE_NAMES = %W[inverted splits page_index].map(&:intern)
+  SAVE_NAMES = %W[inverted splits page_index marks].map(&:intern)
 
   attr_accessor :splits, :page_index, :inverted
   attr_reader :filepath, :loaded
@@ -32,6 +32,7 @@ class PDFDocument
     @inverted = false
     @splits = 2
     @loaded = false
+    @marks = {}
   end
 
   def caption
@@ -180,6 +181,19 @@ class PDFDocument
     end
   end
 
+  def mark (c)
+    @marks[c] = self.page_index
+  end
+
+  def jump (c)
+    if index = @marks[c]
+      self.page_index = index
+      true
+    else
+      false
+    end
+  end
+
   private
 
   def actual_page (index)
@@ -312,64 +326,75 @@ class YAMR
   def on_key_press_event (widget, event)
     c = event.keyval.chr rescue nil
 
-    if '0123456789'.scan(/\d/).include?(c)
-      @count = 0 unless @count
-      @count *= 10
-      @count += c.to_i
-      return true
-    end
-
-    single = @count || 1
-    double = single * @document.splits
-
-    case c
-    when 'j'
-      go_next_page(double)
-    when 'k'
-      go_previous_page(double)
-    when 'J'
-      @document.forward_pages(single)
-    when 'K'
-      @document.back_pages(single)
-    when 'b'
-      @document.insert_blank_page_to_right
-      @document.forward_pages(double)
-    when 'H'
-      @document.insert_blank_page_to_left
-    when 'L'
-      @document.insert_blank_page_to_right
-    when 'g'
-      @document.page_number = @count ? (@count - 1) / @document.splits * @document.splits + 1 : 1
-    when 'G'
-      @document.page_number = @count || -@document.splits + 1
-    when 'v'
-      @document.invert()
-    when 'r'
-      @document.load()
-    when 'w'
-      @document.save()
-    when 's'
-      if @count
-        @document.splits = @count if (1 .. 10) === @count
-      else
-        @document.splits = @document.splits > 1 ? 1 : 2
+    catch (:main) do
+      if @next_on_press
+        @next_on_press.call(c)
+        @next_on_press = nil
+        break :main
       end
-    when 'q'
-      @document.save()
-      Gtk.main_quit
-    else
-      return
-    end
 
-    if @save_counter > 10
-      @save_counter = 0
-      @document.save()
-    else
-      @save_counter += 1
+      if '0123456789'.scan(/\d/).include?(c)
+        @count = 0 unless @count
+        @count *= 10
+        @count += c.to_i
+        return true
+      end
+
+      single = @count || 1
+      double = single * @document.splits
+
+      case c
+      when 'j'
+        go_next_page(double)
+      when 'k'
+        go_previous_page(double)
+      when 'J'
+        @document.forward_pages(single)
+      when 'K'
+        @document.back_pages(single)
+      when 'b'
+        @document.insert_blank_page_to_right
+        @document.forward_pages(double)
+      when 'H'
+        @document.insert_blank_page_to_left
+      when 'L'
+        @document.insert_blank_page_to_right
+      when 'g'
+        @document.page_number = @count ? (@count - 1) / @document.splits * @document.splits + 1 : 1
+      when 'G'
+        @document.page_number = @count || -@document.splits + 1
+      when 'v'
+        @document.invert()
+      when 'r'
+        @document.load()
+      when 'w'
+        @document.save()
+      when 's'
+        if @count
+          @document.splits = @count if (1 .. 10) === @count
+        else
+          @document.splits = @document.splits > 1 ? 1 : 2
+        end
+      when 'q'
+        @document.save()
+        Gtk.main_quit
+      when "'"
+        @next_on_press = proc {|c| @document.jump(c) }
+      when 'm'
+        @next_on_press = proc {|c| @document.mark(c) }
+      else
+        return false
+      end
+
+      if @save_counter > 10
+        @save_counter = 0
+        @document.save()
+      else
+        @save_counter += 1
+      end
     end
 
     @count = nil
-
     repaint(event)
 
     true

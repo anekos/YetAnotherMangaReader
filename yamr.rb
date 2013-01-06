@@ -138,6 +138,16 @@ class PDFDocument
     end
   end
 
+  def toggle_first_blank_page
+    if @page_map.first
+      @total_pages += 1
+      @page_map.insert(0, nil)
+    else
+      @total_pages -= 1
+      @page_map.delete_at(0)
+    end
+  end
+
   def load (save_filepath = default_save_filepath)
     return unless data = (YAML.load_file(save_filepath) rescue {})[@filepath.cleanpath.expand_path.to_s]
 
@@ -353,8 +363,7 @@ class YAMR
       when 'K'
         @document.back_pages(single)
       when 'b'
-        @document.insert_blank_page_to_right
-        @document.forward_pages(double)
+        @document.toggle_first_blank_page
       when 'H'
         @document.insert_blank_page_to_left
       when 'L'

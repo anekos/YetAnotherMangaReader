@@ -5,6 +5,7 @@ require 'gtk2'
 require 'poppler'
 require 'pathname'
 require 'yaml'
+require 'time'
 
 class Size < Struct.new(:width, :height)
   def to_f
@@ -12,8 +13,11 @@ class Size < Struct.new(:width, :height)
   end
 end
 
+class ReadTime < Struct.new(:opened, :closed)
+end
+
 class PDFDocument
-  SAVE_NAMES = %W[inverted splits page_index marks].map(&:intern)
+  SAVE_NAMES = %W[inverted splits page_index marks times].map(&:intern)
 
   attr_accessor :splits, :page_index, :inverted
   attr_reader :filepath, :loaded
@@ -33,6 +37,17 @@ class PDFDocument
     @splits = 2
     @loaded = false
     @marks = {}
+    @times = []
+  end
+
+  def open
+    self.load
+    @times << ReadTime.new(DateTime.now, nil)
+  end
+
+  def close
+    @times.last.closed = DateTime.now
+    self.save
   end
 
   def caption
@@ -279,8 +294,9 @@ class YAMR
   end
 
   def open (filepath)
+    @document.close if @document
     @document = PDFDocument.new(filepath)
-    @document.load
+    @document.open
     call_event(:on_open, @document)
   end
 
@@ -313,7 +329,7 @@ class YAMR
     page_size = @document.get_page_size(0, true)
     @window.set_default_size(page_size.width * @document.splits, page_size.height)
     @window.signal_connect("destroy") do
-      document.save
+      document.close
       Gtk.main_quit
       false
     end
@@ -396,7 +412,7 @@ class YAMR
           @document.splits = @document.splits > 1 ? 1 : 2
         end
       when 'q'
-        @document.save()
+        @document.close
         Gtk.main_quit
       when "'"
         @next_on_press = proc {|c| @document.jump(c) }

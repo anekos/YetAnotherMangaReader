@@ -100,6 +100,22 @@ class PDFDocument
     self.page_index = n - 1
   end
 
+  def real_page_number= (n)
+    if d =  self.page_number_delta
+      self.page_number = n + d
+    else
+      self.page_number = n
+    end
+  end
+
+  def real_page_number
+    if d =  self.page_number_delta
+      self.page_number - d
+    else
+      self.page_number
+    end
+  end
+
   def page_index= (n)
     n = @total_pages + n if n < 0
     @page_index = n if 0 <= n and n < @total_pages
@@ -439,10 +455,12 @@ class YAMR
         @next_on_press = proc {|c| @document.jump(c) }
       when 'm'
         @next_on_press = proc {|c| @document.mark(c) }
-      when 'p'
+      when 'r'
         @document.page_number_delta = @document.page_number - single
-      when 'P'
+      when 'R'
         @document.page_number_delta = nil
+      when 'p'
+        @document.real_page_number = single
       else
         return false
       end

@@ -13,13 +13,26 @@ class Size < Struct.new(:width, :height)
   end
 end
 
-class ReadTime < Struct.new(:opened, :closed)
+class ReadTimeLog < Struct.new(:opened, :closed)
+  def self.make (page)
+    self.new(ReadTime.now(page), nil)
+  end
+
+  def set_closed (page)
+    self.closed = ReadTime.now(page)
+  end
+end
+
+class ReadTime < Struct.new(:time, :page)
+  def self.now (page)
+    self.new(DateTime.now, page)
+  end
 end
 
 class PDFDocument
-  SAVE_NAMES = %W[inverted splits page_index marks times].map(&:intern)
+  SAVE_NAMES = %W[inverted splits page_index marks times page_number_delta].map(&:intern)
 
-  attr_accessor :splits, :page_index, :inverted
+  attr_accessor :splits, :page_index, :inverted, :page_number_delta
   attr_reader :filepath, :loaded
 
   def initialize(filepath)
@@ -38,33 +51,41 @@ class PDFDocument
     @loaded = false
     @marks = {}
     @times = []
+    @page_number_delta = nil
   end
 
   def open
     self.load
-    @times << ReadTime.new(DateTime.now, nil)
+    @times << ReadTimeLog.make(self.page_number)
   end
 
   def close
-    @times.last.closed = DateTime.now
+    @times.last.set_closed(self.page_number)
     self.save
   end
 
   def caption
     pn = page_number
 
-    current_page =
+    current_pages =
       if splits > 1
         if @inverted
-          "#{pn}-#{pn + splits - 1}"
+          [pn, pn + splits - 1]
         else
-          "#{pn + splits - 1}-#{pn}"
+          [pn + splits - 1, pn]
         end
       else
-        "#{pn}"
+        [pn]
       end
 
-    "#{filepath.basename.sub_ext('')} [#{current_page}/#{@total_pages}]"
+    delta =
+      if self.page_number_delta
+        current_pages.map {|it| it - self.page_number_delta } .join('-') + '/'
+      else
+        ''
+      end
+
+    "#{filepath.basename.sub_ext('')} [#{delta}#{current_pages.join('-')}/#{@total_pages}]"
   end
 
   def invert
@@ -418,6 +439,10 @@ class YAMR
         @next_on_press = proc {|c| @document.jump(c) }
       when 'm'
         @next_on_press = proc {|c| @document.mark(c) }
+      when 'p'
+        @document.page_number_delta = @document.page_number - single
+      when 'P'
+        @document.page_number_delta = nil
       else
         return false
       end

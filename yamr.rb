@@ -455,9 +455,9 @@ class YAMR
         @next_on_press = proc {|c| @document.jump(c) }
       when 'm'
         @next_on_press = proc {|c| @document.mark(c) }
-      when 'r'
+      when 'd'
         @document.page_number_delta = @document.page_number - single
-      when 'R'
+      when 'D'
         @document.page_number_delta = nil
       when 'p'
         @document.real_page_number = single

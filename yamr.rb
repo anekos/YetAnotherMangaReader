@@ -29,6 +29,13 @@ class ReadTime < Struct.new(:time, :page)
   end
 end
 
+module Key
+  Up    = 65362
+  Down  = 65364
+  Left  = 65361
+  Right = 65363
+end
+
 class PDFDocument
   SAVE_NAMES = %W[inverted splits page_index marks times page_number_delta].map(&:intern)
 
@@ -418,6 +425,13 @@ class YAMR
       double = single * @document.splits
 
       case c
+      when nil
+        case event.keyval
+        when Key::Up, Key::Left
+          go_previous_page(double)
+        when Key::Down, Key::Right
+          go_next_page(double)
+        end
       when 'j'
         go_next_page(double)
       when 'k'

@@ -397,6 +397,8 @@ class YAMR
       @do_write_to_png = false
         png_filepath = (Pathname.new(Dir.tmpdir) + "yamr-out-#{Time.now.strftime('%Y-%m-%d_%H:%M:%S')}.png").to_s
 
+        context.target.write_to_png(png_filepath.to_s)
+
         ext = context.text_extents(png_filepath)
         margin = 5
 
@@ -408,8 +410,6 @@ class YAMR
         context.set_source_color('red')
         context.move_to(20 + margin, 20 + ext.height + margin)
         context.show_text(png_filepath.to_s)
-
-        context.target.write_to_png(png_filepath.to_s)
     end
 
     true

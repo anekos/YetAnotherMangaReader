@@ -329,6 +329,7 @@ class YAMR
     @filepath = nil
     @document = nil
     @events = {}
+    @do_write_to_png = false
 
     rcfile_path = Pathname.new(ENV['HOME']) + '.yamrrc'
     if rcfile_path.exist?
@@ -391,6 +392,26 @@ class YAMR
     context.fill
 
     @document.draw(context, Size.new(w, h))
+
+    if @do_write_to_png
+      @do_write_to_png = false
+        png_filepath = (Pathname.new(Dir.tmpdir) + "yamr-out-#{Time.now.strftime('%Y-%m-%d_%H:%M:%S')}.png").to_s
+
+        ext = context.text_extents(png_filepath)
+        margin = 5
+
+        context.set_source_color('blue')
+        context.stroke do
+          context.rectangle(20, 20, ext.width + margin * 2, ext.height + margin * 2)
+        end
+
+        context.set_source_color('red')
+        context.move_to(20 + margin, 20 + ext.height + margin)
+        context.show_text(png_filepath.to_s)
+
+        context.target.write_to_png(png_filepath.to_s)
+    end
+
     true
   end
 
@@ -462,6 +483,8 @@ class YAMR
         else
           @document.splits = @document.splits > 1 ? 1 : 2
         end
+      when 'd'
+        @do_write_to_png = true
       when 'q'
         @document.close
         Gtk.main_quit
@@ -498,8 +521,8 @@ class YAMR
     update_title
   end
 
-  def update_title
-    @window.title = @document.caption
+  def update_title (title = @document.caption)
+    @window.title = title
   end
 
   def go_next_page (n)

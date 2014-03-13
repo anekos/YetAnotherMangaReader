@@ -483,7 +483,7 @@ class YAMR
         else
           @document.splits = @document.splits > 1 ? 1 : 2
         end
-      when 'd'
+      when 'S'
         @do_write_to_png = true
       when 'q'
         @document.close
